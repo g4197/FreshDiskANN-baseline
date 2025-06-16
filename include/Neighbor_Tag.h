@@ -24,7 +24,7 @@ namespace diskann {
     Neighbor_Tag(TagT tag, float dist) : tag{tag}, dist{dist} {
     }
     inline bool operator<(const Neighbor_Tag &other) const {
-      return (dist < other.dist);
+      return (dist < other.dist) || (dist == other.dist && tag < other.tag);
     }
     inline bool operator==(const Neighbor_Tag &other) const {
       return (tag == other.tag);
