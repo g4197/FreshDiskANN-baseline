@@ -1,5 +1,79 @@
 # DiskANN
-##Linux build:
+
+## Introduction
+
+This is a slightly-modified version of FreshDiskANN, using `io_uring` IO engine by default.
+
+`scripts/` contains the scripts used in our evaluation of OdinANN (FreshDiskANN serves as a baseline).
+
+To run FreshDiskANN, you should first:
+
+### Prepare Tags
+
+Each vector corresponds to one tag, which does not change during updates (but its ID and location on disk may change).
+FreshDiskANN by default uses identity mapping (vector ID -> tag) for the initial vectors to their tags.
+Use `gen_tags` to generate this mapping explicitly.
+
+```bash
+# build/tests/gen_tags <type[int8/uint8/float]> <base_data_file> <index_file_prefix> <false>
+build/tests/gen_tags uint8 /mnt/nvme/data/bigann/100M.bbin /mnt/nvme/indices_upd/bigann/100M false
+```
+
+You could use other tags if other mapping methods are preferred.
+
+### Generate Ground-Truths
+
+In our evaluation, we insert the second 100M vectors in SIFT1B/DEEP1B into the initial index built using its first 100M vectors.
+We require ground truth for every `[0, 100M+iM)` vectors, where `0 <= i <= 100`.
+The trivial approach is to calculate all of them, but it is costly.
+
+We take a tricky approach: **select top-10 vectors for each interval** from the **top-1000** in SIFT1B (or the first 200M vectors in SIFT). 
+Thus, only one top-1000 of the whole dataset should be calculated.
+Amazingly, this approach has a high success ratio.
+
+
+```bash
+# build/tests/gt_update <file> <tot_npts> <batch_npts> <target_topk> <target_dir> <insert_only>
+# /mnt/nvme/data/bigann/truth.bin is the top-1000 for SIFT.
+# insert 100M points in total, each batch contains 1M vectors.
+build/tests/gt_update /mnt/nvme/data/bigann/truth.bin 100000000 1000000 10 /mnt/nvme/indices_upd/bigann_gnd/1B_topk true
+```
+
+The output files should be stored in `gt_{i * batch_npts}.bin`, each `bin` contains the ground truth for `[0, 100M + i*batch_npts)`.
+
+For workload change (insert the second 100M, delete the first 100M), set the last parameter `insert_only` to `false`.
+
+For the two programs above, **I only place the source code here in `gen_tags.cpp` and `gt_update.cpp` without compiling them (slight modifications are required). They, as well as OdinANN, should be released in late June (at [PipeANN](https://github.com/thustorage/PipeANN) repo).**
+
+### Compile
+
+```bash
+cd third_party/liburing
+./configure
+make -j
+cd ../..
+mkdir build
+cd build
+cmake ..
+make -j
+```
+
+### Use the Scripts
+
+* `moti.sh` serves for the motivation (different merge ratio for inserts).
+
+* `moti_long_xxx.sh` is used for inserting the second 100M vectors into an index built using the first 100M vectors in SIFT1B/DEEP1B/SPACEV1B.
+
+* `moti_stress.sh` is used for inserting the second 200M vectors into an index built using the first 800M vectors in SIFT1B.
+
+* `overall.sh` is a insert-delete-search workload, inserting the second 100M vectors into an index built using the first 100M vectors in SIFT1B/DEEP1B/SPACEV1B, and deleting the first 100M vectors.
+
+We restart FreshDiskANN after each merge, to avoid memory leak.
+
+The index build parameters are the same as [PipeANN](https://github.com/thustorage/PipeANN).
+
+
+## Linux build:
 
 Install the following packages through apt-get, and Intel MKL either by downloading the installer or using [apt](https://software.intel.com/en-us/articles/installing-intel-free-libs-and-python-apt-repo) (we tested with build 2019.4-070).
 ```

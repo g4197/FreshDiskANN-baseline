@@ -31,7 +31,7 @@
 #endif
 #endif
 
-#define WARMUP true
+#define WARMUP false
 
 void print_stats(std::string category, std::vector<float> percentiles,
                  std::vector<float> results) {
@@ -286,7 +286,7 @@ int search_disk_index(int argc, char** argv) {
     float recall = 0;
     if (calc_recall_flag) {
       recall = (float) diskann::calculate_recall(
-          (_u32) query_num, tags, gt_dists, (_u32) gt_dim,
+          (_u32) query_num, gt_ids, gt_dists, (_u32) gt_dim,
           query_result_tags[test_id].data(), (_u32) recall_at,
           (_u32) recall_at);
     }

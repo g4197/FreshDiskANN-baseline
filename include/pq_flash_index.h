@@ -26,7 +26,7 @@
 namespace diskann {
   template<typename T>
   struct QueryScratch {
-    T *  coord_scratch = nullptr;  // MUST BE AT LEAST [MAX_N_CMPS * data_dim]
+    T   *coord_scratch = nullptr;  // MUST BE AT LEAST [MAX_N_CMPS * data_dim]
     _u64 coord_idx = 0;            // index of next [data_dim] scratch to use
 
     char *sector_scratch =
@@ -40,7 +40,7 @@ namespace diskann {
         nullptr;  // MUST BE AT LEAST diskann MAX_DEGREE
     _u8 *aligned_pq_coord_scratch =
         nullptr;  // MUST BE AT LEAST  [N_CHUNKS * MAX_DEGREE]
-    T *    aligned_query_T = nullptr;
+    T     *aligned_query_T = nullptr;
     float *aligned_query_float = nullptr;
 
     void reset() {
@@ -52,7 +52,7 @@ namespace diskann {
   template<typename T>
   struct DiskNode {
     uint32_t  id = 0;
-    T *       coords = nullptr;
+    T        *coords = nullptr;
     uint32_t  nnbrs;
     uint32_t *nbrs;
 
@@ -128,9 +128,9 @@ namespace diskann {
 
     // implemented
     DISKANN_DLLEXPORT size_t
-                      cached_beam_search(const T *query, const _u64 k_search, const _u64 l_search,
-                                         TagT *res_tags, float *res_dists, const _u64 beam_width,
-                                         QueryStats *stats = nullptr);
+    cached_beam_search(const T *query, const _u64 k_search, const _u64 l_search,
+                       TagT *res_tags, float *res_dists, const _u64 beam_width,
+                       QueryStats *stats = nullptr);
 
     DISKANN_DLLEXPORT size_t cached_beam_search_ids(
         const T *query, const _u64 k_search, const _u64 l_search,
@@ -147,7 +147,7 @@ namespace diskann {
      */
     DISKANN_DLLEXPORT void disk_iterate_to_fixed_point(
         const T *vec, const uint32_t Lsize, const uint32_t beam_width,
-        std::vector<Neighbor> &        expanded_nodes_info,
+        std::vector<Neighbor>         &expanded_nodes_info,
         tsl::robin_map<uint32_t, T *> *coord_map = nullptr,
         QueryStats *stats = nullptr, ThreadData<T> *passthrough_data = nullptr,
         tsl::robin_set<uint32_t> *exclude_nodes = nullptr);
@@ -189,7 +189,7 @@ namespace diskann {
     // deflates `vec` into PQ ids
     DISKANN_DLLEXPORT std::vector<_u8> deflate_vector(const T *vec);
     std::pair<_u8 *, _u32>             get_pq_config() {
-      return std::make_pair(this->data, (uint32_t) this->n_chunks);
+                  return std::make_pair(this->data, (uint32_t) this->n_chunks);
     }
     DISKANN_DLLEXPORT TagT *get_tags() {
       return this->tags;
@@ -212,6 +212,7 @@ namespace diskann {
     // offset in sector: [(i % nnodes_per_sector) * max_node_len]
     // nnbrs of node `i`: *(unsigned*) (buf)
     // nbrs of node `i`: ((unsigned*)buf) + 1
+   public:
     _u64 max_node_len = 0, nnodes_per_sector = 0, max_degree = 0;
 
    protected:
@@ -219,7 +220,7 @@ namespace diskann {
     DISKANN_DLLEXPORT void setup_thread_data(_u64 nthreads);
     DISKANN_DLLEXPORT void destroy_thread_data();
 
-   private:
+   public:
     // data info
     _u64 num_points = 0;
     _u64 num_frozen_points = 0;
@@ -237,7 +238,7 @@ namespace diskann {
     // data: _u8 * n_chunks
     // chunk_size = chunk size of each dimension chunk
     // pq_tables = float* [[2^8 * [chunk_size]] * n_chunks]
-    _u8 *                data = nullptr;
+    _u8                 *data = nullptr;
     _u64                 chunk_size;
     _u64                 n_chunks;
     FixedChunkPQTable<T> pq_table;
@@ -264,19 +265,22 @@ namespace diskann {
                   // closest centroid as the starting point of search
 
     // nhood_cache
-    unsigned *                                    nhood_cache_buf = nullptr;
+    unsigned                                     *nhood_cache_buf = nullptr;
     tsl::robin_map<_u32, std::pair<_u32, _u32 *>> nhood_cache;
 
     // coord_cache
-    T *                       coord_cache_buf = nullptr;
+    T                        *coord_cache_buf = nullptr;
     tsl::robin_map<_u32, T *> coord_cache;
 
     // thread-specific scratch
+   public:
     ConcurrentQueue<ThreadData<T>> thread_data;
-    std::vector<ThreadData<T>>     thread_data_backing_buf;
-    _u64                           max_nthreads;
-    bool                           load_flag = false;
-    bool                           count_visited_nodes = false;
+
+   private:
+    std::vector<ThreadData<T>> thread_data_backing_buf;
+    _u64                       max_nthreads;
+    bool                       load_flag = false;
+    bool                       count_visited_nodes = false;
 
     bool single_index_file;  // For fresh + static. Save
     // everything in a single file
@@ -297,7 +301,7 @@ namespace diskann {
     // any additions we make to the header. This is an outer limit
     // on how big the header can be.
     static const int HEADER_SIZE = 256;
-    char *           getHeaderBytes();
+    char            *getHeaderBytes();
 #endif
   };
 }  // namespace diskann

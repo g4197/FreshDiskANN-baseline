@@ -14,7 +14,7 @@
 #include "aux_utils.h"
 #include "cached_io.h"
 #include "index.h"
-#include "mkl.h"
+#include "mkl/mkl.h"
 #include "omp.h"
 #include "partition_and_pq.h"
 #include "percentile_stats.h"
@@ -62,7 +62,7 @@ namespace diskann {
     }
 
     size_t num_blocks = DIV_ROUND_UP(fsize, read_blk_size);
-    char * dump = new char[read_blk_size];
+    char  *dump = new char[read_blk_size];
     for (_u64 i = 0; i < num_blocks; i++) {
       size_t cur_block_size = read_blk_size > fsize - (i * read_blk_size)
                                   ? fsize - (i * read_blk_size)
@@ -99,8 +99,8 @@ namespace diskann {
 
   size_t calculate_num_pq_chunks(double final_index_ram_limit,
                                  size_t points_num, uint32_t dim) {
-    size_t num_pq_chunks =
-        (size_t)(std::floor)(_u64(final_index_ram_limit / (double) points_num));
+    size_t num_pq_chunks = (size_t) (std::floor)(
+        _u64(final_index_ram_limit / (double) points_num));
 
     diskann::cout << "Calculated num_pq_chunks :" << num_pq_chunks << std::endl;
     num_pq_chunks = num_pq_chunks <= 0 ? 1 : num_pq_chunks;
@@ -233,7 +233,7 @@ namespace diskann {
   T *load_warmup(MemoryMappedFiles &files, const std::string &cache_warmup_file,
                  uint64_t &warmup_num, uint64_t warmup_dim,
                  uint64_t warmup_aligned_dim) {
-    T *      warmup = nullptr;
+    T       *warmup = nullptr;
     uint64_t file_dim, file_aligned_dim;
 
     if (files.fileExists(cache_warmup_file)) {
@@ -264,7 +264,7 @@ namespace diskann {
   template<typename T>
   T *load_warmup(const std::string &cache_warmup_file, uint64_t &warmup_num,
                  uint64_t warmup_dim, uint64_t warmup_aligned_dim) {
-    T *      warmup = nullptr;
+    T       *warmup = nullptr;
     uint64_t file_dim, file_aligned_dim;
 
     if (file_exists(cache_warmup_file)) {
@@ -631,7 +631,7 @@ namespace diskann {
       if (qps > max_qps && lat_999 < (15000) + mean_latency * 2) {
         max_qps = qps;
         best_bw = cur_bw;
-        cur_bw = (uint32_t)(std::ceil)((float) cur_bw * 1.1f);
+        cur_bw = (uint32_t) (std::ceil)((float) cur_bw * 1.1f);
       } else {
         stop_flag = true;
       }
@@ -892,7 +892,7 @@ namespace diskann {
 
   template<typename T, typename TagT>
   bool build_disk_index(const char *dataPath, const char *indexFilePath,
-                        const char *    indexBuildParameters,
+                        const char     *indexBuildParameters,
                         diskann::Metric _compareMetric, bool single_file_index,
                         const char *tag_file) {
     std::stringstream parser;

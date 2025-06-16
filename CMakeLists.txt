@@ -8,6 +8,12 @@ else()
 endif()
 set(CMAKE_STANDARD 14)
 
+if(NOT CMAKE_BUILD_TYPE)
+	set(CMAKE_BUILD_TYPE Release)
+	add_compile_options(-g -O3)
+	# add_compile_options(-fsanitize=address -lasan)
+	# add_link_options(-fsanitize=address)
+endif()
 
 #set(CMAKE_USER_MAKE_RULES_OVERRIDE "${CMAKE_CURRENT_LIST_DIR}/CompilerOptions.cmake")
 if(MSVC)
@@ -19,6 +25,21 @@ endif()
 
 project(diskann)
 include_directories(${PROJECT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/include/tsl/include ${PROJECT_SOURCE_DIR}/include/dll ${PROJECT_SOURCE_DIR}/include/ols)
+
+add_compile_options(-g -O3)
+add_definitions(
+	# -DUSE_AIO
+	# -DDUMMY_STRESS
+)
+include_directories(
+	${PROJECT_SOURCE_DIR}/third_party/liburing/include
+)
+link_directories(
+	${PROJECT_SOURCE_DIR}/third_party/liburing/lib
+)
+link_libraries(
+	uring
+)
 
 #OpenMP
 find_package(OpenMP)

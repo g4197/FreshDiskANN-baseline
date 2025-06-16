@@ -87,3 +87,43 @@ add_executable(test_incr_intf test_incr_intf.cpp)
 	target_link_libraries(test_incr_intf optimized ${CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE}/nsg_dll.lib)
 endif()
 # formatter
+
+add_executable(test_merge_search test_merge_search.cpp)
+if(MSVC)
+
+	target_link_options(test_merge_search PRIVATE /MACHINE:x64)
+	target_link_libraries(test_merge_search debug ${CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG}/nsg_dll.lib)
+	target_link_libraries(test_merge_search optimized ${CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE}/nsg_dll.lib)
+else() 
+	target_link_libraries(test_merge_search ${PROJECT_NAME} aio)
+endif()
+
+add_executable(test_workload_change test_workload_change.cpp)
+if(MSVC)
+
+	target_link_options(test_workload_change PRIVATE /MACHINE:x64)
+	target_link_libraries(test_workload_change debug ${CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG}/nsg_dll.lib)
+	target_link_libraries(test_workload_change optimized ${CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE}/nsg_dll.lib)
+else() 
+	target_link_libraries(test_workload_change ${PROJECT_NAME} aio)
+endif()
+
+add_executable(test_insert test_insert.cpp)
+if(MSVC)
+
+	target_link_options(test_insert PRIVATE /MACHINE:x64)
+	target_link_libraries(test_insert debug ${CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG}/nsg_dll.lib)
+	target_link_libraries(test_insert optimized ${CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE}/nsg_dll.lib)
+else() 
+	target_link_libraries(test_insert ${PROJECT_NAME} aio)
+endif()
+
+add_executable(overall_performance overall_performance.cpp)
+target_link_libraries(overall_performance ${PROJECT_NAME} jemalloc aio)
+# formatter
+
+add_executable(motivation motivation.cpp)
+target_link_libraries(motivation ${PROJECT_NAME} jemalloc aio)
+
+add_executable(motivation_stress motivation_stress.cpp)
+target_link_libraries(motivation_stress ${PROJECT_NAME} jemalloc aio)

@@ -33,21 +33,18 @@ namespace diskann {
        ndims, Distance<T>* dist, const uint32_t beam_width, const uint32_t
        range, const uint32_t l_index, const float alpha, const uint32_t maxc,
        bool single_file_index);*/
-    DISKANN_DLLEXPORT StreamingMerger(const uint32_t ndims, Distance<T> *dist,
-                                        diskann::Metric dist_metric,
-                                      const uint32_t beam_width,
-                                      const uint32_t range,
-                                      const uint32_t l_index, const float alpha,
-                                      const uint32_t maxc,
-                                      bool           single_file_index);
+    DISKANN_DLLEXPORT StreamingMerger(
+        const uint32_t ndims, Distance<T> *dist, diskann::Metric dist_metric,
+        const uint32_t beam_width, const uint32_t range, const uint32_t l_index,
+        const float alpha, const uint32_t maxc, bool single_file_index);
 
     DISKANN_DLLEXPORT ~StreamingMerger();
 
-    DISKANN_DLLEXPORT void merge(const char *                    disk_in,
-                                 const std::vector<std::string> &mem_in,
-                                 const char *                    disk_out,
-                                 std::vector<const std::vector<TagT>*> &deleted_tags,
-                                 std::string &working_folder);
+    DISKANN_DLLEXPORT void merge(
+        const char *disk_in, const std::vector<std::string> &mem_in,
+        const char                             *disk_out,
+        std::vector<const std::vector<TagT> *> &deleted_tags,
+        std::string                            &working_folder);
     // merge all memory indices into the disk index and write out new disk index
     void mergeImpl();
 
@@ -58,27 +55,27 @@ namespace diskann {
     void insert_mem_vec(const T *vec, const uint32_t offset_id);
     void offset_iterate_to_fixed_point(
         const T *vec, const uint32_t Lsize,
-        std::vector<Neighbor> &        expanded_nodes_info,
-        tsl::robin_map<uint32_t, T *> &coord_map);
+        std::vector<Neighbor>         &expanded_nodes_info,
+        tsl::robin_map<uint32_t, T *> &coord_map, ThreadData<T> &tdata);
     // used to prune insert() edges
     void prune_neighbors(const tsl::robin_map<uint32_t, T *> &coord_map,
-                         std::vector<Neighbor> &              pool,
-                         std::vector<uint32_t> &              pruned_list);
+                         std::vector<Neighbor>               &pool,
+                         std::vector<uint32_t>               &pruned_list);
     // used to prune inter-insert() edges
     void prune_neighbors_pq(std::vector<Neighbor> &pool,
                             std::vector<uint32_t> &pruned_list,
-                            uint8_t *              scratch = nullptr);
-    void occlude_list(std::vector<Neighbor> &              pool,
+                            uint8_t               *scratch = nullptr);
+    void occlude_list(std::vector<Neighbor>               &pool,
                       const tsl::robin_map<uint32_t, T *> &coord_map,
-                      std::vector<Neighbor> &              result,
-                      std::vector<float> &                 occlude_factor);
+                      std::vector<Neighbor>               &result,
+                      std::vector<float>                  &occlude_factor);
     void occlude_list_pq(std::vector<Neighbor> &pool,
                          std::vector<Neighbor> &result,
-                         std::vector<float> &   occlude_factor,
-                         uint8_t *              scratch = nullptr);
+                         std::vector<float>    &occlude_factor,
+                         uint8_t               *scratch = nullptr);
 
     void dump_to_disk(const uint32_t start_id, const char *buf,
-                      const uint32_t n_sector, std::ofstream& output_writer);
+                      const uint32_t n_sector, std::ofstream &output_writer);
 
     /* delete related funcs */
     // converts tags into deleted IDs
@@ -89,7 +86,7 @@ namespace diskann {
     void populate_deleted_nhoods();
     // eliminates references to deleted nodes in id_nhoods
     void consolidate_deletes(DiskNode<T> &disk_node,
-                             uint8_t *    scratch = nullptr);
+                             uint8_t     *scratch = nullptr);
     // whether the specific node is deleted / node id not in use
     bool is_deleted(const DiskNode<T> &disk_node);
 
@@ -105,7 +102,7 @@ namespace diskann {
     // returns ID of mem index offset_id belongs to; uint32_t::max() otherwise
     uint32_t              get_index_id(const uint32_t offset_id) const;
     std::vector<uint32_t> get_edge_list(const uint32_t offset_id);
-    const T *             get_mem_data(const uint32_t offset_id);
+    const T              *get_mem_data(const uint32_t offset_id);
 
     /* merge related funcs */
     void write_tag_file(const std::string &tag_out_filename,
@@ -126,34 +123,31 @@ namespace diskann {
     std::vector<std::pair<uint32_t, uint32_t>> inverse_list;
 
     // disk index
-    GraphDelta *           disk_delta;
+    GraphDelta            *disk_delta;
     PQFlashIndex<T, TagT> *disk_index;
     std::vector<uint32_t>  init_ids;
-    uint8_t *              pq_data = nullptr;
-    TagT *                 disk_tags = nullptr;
+    uint8_t               *pq_data = nullptr;
+    TagT                  *disk_tags = nullptr;
     uint32_t               pq_nchunks;
     uint32_t               max_node_len, nnodes_per_sector, disk_npts;
-    std::string  disk_index_out_path, disk_index_in_path, pq_coords_file;
-    std::string  temp_disk_index_path, temp_pq_coords_path, temp_tags_path;
-    std::string  final_index_file, final_pq_coords_file, final_tags_file;
-    //std::fstream output_writer;
+    std::string disk_index_out_path, disk_index_in_path, pq_coords_file;
+    std::string temp_disk_index_path, temp_pq_coords_path, temp_tags_path;
+    std::string final_index_file, final_pq_coords_file, final_tags_file;
+    // std::fstream output_writer;
     std::vector<ThreadData<T>> disk_thread_data;
 
     // mem-index
-    std::vector<GraphDelta *>                               mem_deltas;
-    //std::vector<Index<T, TagT> *>                           mem_indices;
-    //std::vector<const std::vector<std::vector<uint32_t>> *> mem_graphs;
-    std::vector<const T *>                                  mem_data;
-    std::vector<std::unique_ptr<TagT[]>>                    mem_tags;
-    std::vector<uint32_t>                                   offset_ids;
-    std::vector<uint32_t>                                   mem_npts;
-    Distance<T> *                                           dist_cmp;
-    diskann::Metric                                         dist_metric;
-    //T *                                                     _data_load;
-    std::vector<tsl::robin_set<TagT>>                       latter_deleted_tags;
-
-
-
+    std::vector<GraphDelta *> mem_deltas;
+    // std::vector<Index<T, TagT> *>                           mem_indices;
+    // std::vector<const std::vector<std::vector<uint32_t>> *> mem_graphs;
+    std::vector<const T *>               mem_data;
+    std::vector<std::unique_ptr<TagT[]>> mem_tags;
+    std::vector<uint32_t>                offset_ids;
+    std::vector<uint32_t>                mem_npts;
+    Distance<T>                         *dist_cmp;
+    diskann::Metric                      dist_metric;
+    // T *                                                     _data_load;
+    std::vector<tsl::robin_set<TagT>> latter_deleted_tags;
 
     // allocators
     // FixedSizeAlignedAllocator<T> *fp_alloc = nullptr;
@@ -161,7 +155,7 @@ namespace diskann {
 
     // book keeping
     std::vector<uint32_t>  free_ids;
-    uint8_t *              thread_pq_scratch = nullptr;
+    uint8_t               *thread_pq_scratch = nullptr;
     std::vector<uint8_t *> thread_bufs;
     // vector info
     uint32_t ndims, aligned_ndims;

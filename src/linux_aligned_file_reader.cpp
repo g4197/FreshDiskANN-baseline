@@ -1,22 +1,175 @@
+#ifndef USE_AIO
+#include "linux_aligned_file_reader.h"
 
+#include <cassert>
+#include <cstdint>
+#include <cstdio>
+#include <iostream>
+#include "aligned_file_reader.h"
+#include "liburing.h"
+#include "tsl/robin_map.h"
+#include "utils.h"
+
+#define MAX_EVENTS 256
+
+namespace {
+  constexpr uint64_t kNoUserData = 0;
+  void execute_io(io_context_t ring, int fd, std::vector<AlignedRead> &reqs,
+                  uint64_t n_retries = 0, bool write = false) {
+    // break-up requests into chunks of size MAX_EVENTS each
+    for (uint64_t i = 0; i < reqs.size(); i += MAX_EVENTS) {
+      auto ed = std::min(reqs.size(), i + MAX_EVENTS);
+      for (uint64_t j = i; j < ed; j++) {
+        auto sqe = io_uring_get_sqe(ring);
+        sqe->user_data = kNoUserData;
+        if (write) {
+          io_uring_prep_write(sqe, fd, reqs[j].buf, reqs[j].len,
+                              reqs[j].offset);
+        } else {
+          io_uring_prep_read(sqe, fd, reqs[j].buf, reqs[j].len, reqs[j].offset);
+        }
+      }
+      io_uring_submit(ring);
+
+      io_uring_cqe *cqe = nullptr;
+      for (uint64_t j = i; j < ed; j++) {
+        int ret = io_uring_wait_cqe(ring, &cqe);
+        // LOG(INFO) << "Wait CQE ring " << ring << " ret " << ret;
+        io_uring_cqe_seen(ring, cqe);
+      }
+    }
+  }
+}  // namespace
+
+LinuxAlignedFileReader::LinuxAlignedFileReader() {
+  this->file_desc = -1;
+}
+
+LinuxAlignedFileReader::~LinuxAlignedFileReader() {
+  int64_t ret;
+  // check to make sure file_desc is closed
+  ret = ::fcntl(this->file_desc, F_GETFD);
+  if (ret == -1) {
+    if (errno != EBADF) {
+      std::cerr << "close() not called" << std::endl;
+      // close file desc
+      ret = ::close(this->file_desc);
+      // error checks
+      if (ret == -1) {
+        std::cerr << "close() failed; returned " << ret << ", errno=" << errno
+                  << ":" << ::strerror(errno) << std::endl;
+      }
+    }
+  }
+}
+
+namespace ioctx {
+  static thread_local io_context_t ring = nullptr;
+};
+
+io_context_t LinuxAlignedFileReader::get_ctx() {
+  // if (ioctx::ring == nullptr) {
+  //   ioctx::ring = new io_uring();
+  //   io_uring_queue_init(MAX_EVENTS, ioctx::ring, 0);
+  // }
+  auto ring = new io_uring();
+  io_uring_queue_init(MAX_EVENTS, ring, 0);
+  return ring;
+  // return ioctx::ring;
+}
+
+void LinuxAlignedFileReader::register_thread() {
+  // if (ioctx::ring == nullptr) {
+  //   ioctx::ring = new io_uring();
+  //   io_uring_queue_init(MAX_EVENTS, ioctx::ring, 0);
+  // }
+}
+
+void LinuxAlignedFileReader::deregister_thread() {
+  // io_uring_queue_exit(ioctx::ring);
+  // delete ioctx::ring;
+  // ioctx::ring = nullptr;
+}
+
+void LinuxAlignedFileReader::deregister_all_threads() {
+}
+
+void LinuxAlignedFileReader::open(const std::string &fname,
+                                  bool               enable_writes = false,
+                                  bool               enable_create = false) {
+  int flags = O_DIRECT | O_LARGEFILE | O_RDWR;
+  if (enable_create) {
+    flags |= O_CREAT;
+  }
+  this->file_desc = ::open(fname.c_str(), flags);
+  // error checks
+  assert(this->file_desc != -1);
+  //  std::cerr << "Opened file : " << fname << std::endl;
+}
+
+void LinuxAlignedFileReader::close() {
+  //  int64_t ret;
+
+  // check to make sure file_desc is closed
+  ::fcntl(this->file_desc, F_GETFD);
+  //  assert(ret != -1);
+
+  ::close(this->file_desc);
+  //  assert(ret != -1);
+}
+
+void LinuxAlignedFileReader::read(std::vector<AlignedRead> &read_reqs,
+                                  IOContext &ctx, bool async) {
+  assert(this->file_desc != -1);
+  execute_io(ctx, this->file_desc, read_reqs);
+  if (async == true) {
+    std::cerr << "async only supported in Windows for now." << std::endl;
+  }
+}
+
+void LinuxAlignedFileReader::write(std::vector<AlignedRead> &write_reqs,
+                                   IOContext &ctx, bool async) {
+  assert(this->file_desc != -1);
+  execute_io(ctx, this->file_desc, write_reqs, 0, true);
+  if (async == true) {
+    std::cerr << "async only supported in Windows for now." << std::endl;
+  }
+}
+
+void LinuxAlignedFileReader::read_fd(int                       fd,
+                                     std::vector<AlignedRead> &read_reqs,
+                                     IOContext                &ctx) {
+  assert(this->file_desc != -1);
+  execute_io(ctx, fd, read_reqs);
+}
+
+void LinuxAlignedFileReader::write_fd(int                       fd,
+                                      std::vector<AlignedRead> &write_reqs,
+                                      IOContext                &ctx) {
+  assert(this->file_desc != -1);
+  execute_io(ctx, fd, write_reqs, 0, true);
+}
+#else
 #include "linux_aligned_file_reader.h"
 
 #include <aio.h>
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <iostream>
+#include "aligned_file_reader.h"
 #include "tsl/robin_map.h"
 #include "utils.h"
-#define MAX_EVENTS 1024
+#define MAX_EVENTS 256
 
 namespace {
   typedef struct io_event io_event_t;
   typedef struct iocb     iocb_t;
 
-  void execute_io(io_context_t ctx, int fd, std::vector<AlignedRead> &read_reqs,
-                  uint64_t n_retries = 0) {
+  void execute_io(io_context_t ctx, int fd, std::vector<AlignedRead> &reqs,
+                  uint64_t n_retries = 0, bool write = false) {
 #ifdef DEBUG
-    for (auto &req : read_reqs) {
+    for (auto &req : reqs) {
       assert(IS_ALIGNED(req.len, 512));
       // diskann::cout << "request:"<<req.offset<<":"<<req.len << std::endl;
       assert(IS_ALIGNED(req.offset, 512));
@@ -26,18 +179,23 @@ namespace {
 #endif
 
     // break-up requests into chunks of size MAX_EVENTS each
-    uint64_t n_iters = ROUND_UP(read_reqs.size(), MAX_EVENTS) / MAX_EVENTS;
+    uint64_t n_iters = ROUND_UP(reqs.size(), MAX_EVENTS) / MAX_EVENTS;
     for (uint64_t iter = 0; iter < n_iters; iter++) {
-      uint64_t n_ops =
-          std::min((uint64_t) read_reqs.size() - (iter * MAX_EVENTS),
-                   (uint64_t) MAX_EVENTS);
+      uint64_t n_ops = std::min((uint64_t) reqs.size() - (iter * MAX_EVENTS),
+                                (uint64_t) MAX_EVENTS);
       std::vector<iocb_t *>    cbs(n_ops, nullptr);
       std::vector<io_event_t>  evts(n_ops);
       std::vector<struct iocb> cb(n_ops);
       for (uint64_t j = 0; j < n_ops; j++) {
-        io_prep_pread(cb.data() + j, fd, read_reqs[j + iter * MAX_EVENTS].buf,
-                      read_reqs[j + iter * MAX_EVENTS].len,
-                      read_reqs[j + iter * MAX_EVENTS].offset);
+        if (write) {
+          io_prep_pwrite(cb.data() + j, fd, reqs[j + iter * MAX_EVENTS].buf,
+                         reqs[j + iter * MAX_EVENTS].len,
+                         reqs[j + iter * MAX_EVENTS].offset);
+        } else {
+          io_prep_pread(cb.data() + j, fd, reqs[j + iter * MAX_EVENTS].buf,
+                        reqs[j + iter * MAX_EVENTS].len,
+                        reqs[j + iter * MAX_EVENTS].offset);
+        }
       }
 
       // initialize `cbs` using `cb` array
@@ -55,8 +213,8 @@ namespace {
         if (ret != (int64_t) n_ops) {
           std::cerr << "io_submit() failed; returned " << ret
                     << ", expected=" << n_ops << ", ernno=" << errno << "="
-                    << ::strerror((int) -ret) << ", try #" << n_tries + 1;
-          diskann::cout << "ctx: " << ctx << "\n";
+                    << ::strerror((int) -ret) << ", try #" << n_tries + 1
+                    << " ctx: " << ctx << "\n";
           exit(-1);
         } else {
           // wait on io_getevents
@@ -66,7 +224,8 @@ namespace {
           if (ret != (int64_t) n_ops) {
             std::cerr << "io_getevents() failed; returned " << ret
                       << ", expected=" << n_ops << ", ernno=" << errno << "="
-                      << ::strerror((int) -ret) << ", try #" << n_tries + 1;
+                      << ::strerror((int) -ret) << ", try #" << n_tries + 1
+                      << std::endl;
             exit(-1);
           } else {
             break;
@@ -162,12 +321,7 @@ void LinuxAlignedFileReader::deregister_all_threads() {
 void LinuxAlignedFileReader::open(const std::string &fname,
                                   bool               enable_writes = false,
                                   bool               enable_create = false) {
-  int flags = O_DIRECT | O_LARGEFILE;
-  if (!enable_writes) {
-    flags |= O_RDONLY;
-  } else {
-    flags |= O_RDWR;
-  }
+  int flags = O_DIRECT | O_LARGEFILE | O_RDWR;
   if (enable_create) {
     flags |= O_CREAT;
   }
@@ -189,7 +343,7 @@ void LinuxAlignedFileReader::close() {
 }
 
 void LinuxAlignedFileReader::read(std::vector<AlignedRead> &read_reqs,
-                                  io_context_t &ctx, bool async) {
+                                  IOContext &ctx, bool async) {
   assert(this->file_desc != -1);
   execute_io(ctx, this->file_desc, read_reqs);
   if (async == true) {
@@ -197,8 +351,31 @@ void LinuxAlignedFileReader::read(std::vector<AlignedRead> &read_reqs,
   }
 }
 
+void LinuxAlignedFileReader::write(std::vector<AlignedRead> &write_reqs,
+                                   IOContext &ctx, bool async) {
+  assert(this->file_desc != -1);
+  execute_io(ctx, this->file_desc, write_reqs, 0, true);
+  if (async == true) {
+    std::cerr << "async only supported in Windows for now." << std::endl;
+  }
+}
+
+void LinuxAlignedFileReader::read_fd(int                       fd,
+                                     std::vector<AlignedRead> &read_reqs,
+                                     IOContext                &ctx) {
+  assert(this->file_desc != -1);
+  execute_io(ctx, fd, read_reqs);
+}
+
+void LinuxAlignedFileReader::write_fd(int                       fd,
+                                      std::vector<AlignedRead> &write_reqs,
+                                      IOContext                &ctx) {
+  assert(this->file_desc != -1);
+  execute_io(ctx, fd, write_reqs, 0, true);
+}
+
 void LinuxAlignedFileReader::sequential_write(AlignedRead &write_req,
-                                              IOContext &  ctx) {
+                                              IOContext   &ctx) {
   assert(this->file_desc != -1);
   // check inputs
   assert(IS_ALIGNED(write_req.offset, 4096));
@@ -208,7 +385,7 @@ void LinuxAlignedFileReader::sequential_write(AlignedRead &write_req,
   // create write request
   io_event_t  evt;
   struct iocb cb;
-  iocb_t *    cbs = &cb;
+  iocb_t     *cbs = &cb;
   io_prep_pwrite(&cb, this->file_desc, write_req.buf, write_req.len,
                  write_req.offset);
 
@@ -234,3 +411,4 @@ void LinuxAlignedFileReader::sequential_write(AlignedRead &write_req,
     }
   }
 }
+#endif

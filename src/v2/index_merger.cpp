@@ -25,9 +25,9 @@
 // max number of points per mem index being merged -- 32M
 #define MAX_PTS_PER_MEM_INDEX (uint64_t)(1 << 25)
 #define INDEX_OFFSET (uint64_t)(MAX_PTS_PER_MEM_INDEX * 4)
-#define MAX_INSERT_THREADS (uint64_t) 18
-#define MAX_N_THREADS (uint64_t) 18
-#define NUM_INDEX_LOAD_THREADS (uint64_t) 18
+#define MAX_INSERT_THREADS (uint64_t) 24
+#define MAX_N_THREADS (uint64_t) 24
+#define NUM_INDEX_LOAD_THREADS (uint64_t) 24
 #define PER_THREAD_BUF_SIZE (uint64_t)(65536 * 64 * 4)
 
 #define PQ_FLASH_INDEX_MAX_NODES_TO_CACHE 200000
@@ -35,9 +35,9 @@
 namespace diskann {
   template<typename T, typename TagT>
   StreamingMerger<T, TagT>::StreamingMerger(
-      const uint32_t ndims, Distance<T> *dist, diskann::Metric dist_metric, const uint32_t beam_width,
-      const uint32_t range, const uint32_t l_index, const float alpha,
-      const uint32_t maxc, bool single_file_index) {
+      const uint32_t ndims, Distance<T> *dist, diskann::Metric dist_metric,
+      const uint32_t beam_width, const uint32_t range, const uint32_t l_index,
+      const float alpha, const uint32_t maxc, bool single_file_index) {
     // book keeping
     this->ndims = ndims;
     this->aligned_ndims = (_u32) ROUND_UP(this->ndims, 8);
@@ -72,9 +72,13 @@ namespace diskann {
     }
     aligned_free((void *) this->thread_pq_scratch);
     for (auto &data : this->mem_data) {
-      //delete[] data;
-      aligned_free((void *)data);
+      // delete[] data;
+      aligned_free((void *) data);
     }
+
+    remove(this->temp_disk_index_path.c_str());
+    remove(this->temp_pq_coords_path.c_str());
+    remove(this->temp_tags_path.c_str());
   }
 
   template<typename T, typename TagT>
@@ -87,9 +91,9 @@ namespace diskann {
       diskann::cout << "Processing pq of inserts from mem-DiskANN #" << i + 1
                     << "\n";
       const tsl::robin_set<uint32_t> &deleted_set = this->mem_deleted_ids[i];
-      const T* coords = this->mem_data[i];
-      const uint32_t offset = this->offset_ids[i];
-      const uint32_t count = this->mem_npts[i];
+      const T                        *coords = this->mem_data[i];
+      const uint32_t                  offset = this->offset_ids[i];
+      const uint32_t                  count = this->mem_npts[i];
 // TODO (perf) :: trivially parallelizes ??
 #pragma omp parallel for schedule(dynamic, 1) num_threads(MAX_N_THREADS)
       // iteratively insert each point into full index
@@ -101,7 +105,7 @@ namespace diskann {
 
         // data for jth point
         const T *j_coords =
-            coords + ((uint64_t)(this->aligned_ndims) * (uint64_t) j);
+            coords + ((uint64_t) (this->aligned_ndims) * (uint64_t) j);
         const uint32_t j_id = offset + (uint32_t) j;
 
         // get renamed ID
@@ -124,9 +128,9 @@ namespace diskann {
     diskann::cout << "Finished deflating all points\n";
     double   e2e_time = ((double) total_insert_timer.elapsed()) / (1000000.0);
     double   insert_time = std::accumulate(this->insert_times.begin(),
-                                         this->insert_times.end(), 0.0);
+                                           this->insert_times.end(), 0.0);
     double   delta_time = std::accumulate(this->delta_times.begin(),
-                                        this->delta_times.end(), 0.0);
+                                          this->delta_times.end(), 0.0);
     uint32_t n_inserts =
         std::accumulate(this->mem_npts.begin(), this->mem_npts.end(), 0);
     diskann::cout << "TIMER:: PQ time per point = " << insert_time / n_inserts
@@ -143,17 +147,17 @@ namespace diskann {
     for (uint32_t i = 0; i < this->mem_data.size(); i++) {
       diskann::cout << "Processing inserts from mem-DiskANN #" << i + 1 << "\n";
       const tsl::robin_set<uint32_t> &deleted_set = this->mem_deleted_ids[i];
-      const T* coords = this->mem_data[i];
-      const uint32_t offset = this->offset_ids[i];
-      const uint32_t count = this->mem_npts[i];
+      const T                        *coords = this->mem_data[i];
+      const uint32_t                  offset = this->offset_ids[i];
+      const uint32_t                  count = this->mem_npts[i];
 
       size_t cur_cache_size = 0;
 #ifdef USE_TCMALLOC
       MallocExtension::instance()->GetNumericProperty(
           "tcmalloc.max_total_thread_cache_bytes", &cur_cache_size);
-      //diskann::cout << "Current cache size : " << (cur_cache_size >> 10)
-      //              << " KiB\n"
-      //              << std::endl;
+      // diskann::cout << "Current cache size : " << (cur_cache_size >> 10)
+      //               << " KiB\n"
+      //               << std::endl;
       MallocExtension::instance()->SetNumericProperty(
           "tcmalloc.max_total_thread_cache_bytes", 128 * 1024 * 1024);
 
@@ -175,7 +179,7 @@ namespace diskann {
         }
         // data for jth point
         const T *j_coords =
-            coords + ((uint64_t)(this->aligned_ndims) * (uint64_t) j);
+            coords + ((uint64_t) (this->aligned_ndims) * (uint64_t) j);
         const uint32_t j_id = offset + (uint32_t) j;
 
         // insert into index
@@ -186,9 +190,9 @@ namespace diskann {
     diskann::cout << "Finished inserting all points\n";
     double   e2e_time = ((double) total_insert_timer.elapsed()) / (1000000.0);
     double   insert_time = std::accumulate(this->insert_times.begin(),
-                                         this->insert_times.end(), 0.0);
+                                           this->insert_times.end(), 0.0);
     double   delta_time = std::accumulate(this->delta_times.begin(),
-                                        this->delta_times.end(), 0.0);
+                                          this->delta_times.end(), 0.0);
     uint32_t n_inserts =
         std::accumulate(this->mem_npts.begin(), this->mem_npts.end(), 0);
     diskann::cout << "TIMER:: Insert time per point = "
@@ -198,7 +202,7 @@ namespace diskann {
   }
 
   template<typename T, typename TagT>
-  void StreamingMerger<T, TagT>::insert_mem_vec(const T *      mem_vec,
+  void StreamingMerger<T, TagT>::insert_mem_vec(const T       *mem_vec,
                                                 const uint32_t offset_id) {
     Timer timer;
     float insert_time, delta_time;
@@ -207,11 +211,18 @@ namespace diskann {
     std::vector<Neighbor>         tmp;
     tsl::robin_map<uint32_t, T *> coord_map;
 
+    auto         &tdata = this->disk_index->thread_data;
+    ThreadData<T> thread_data = tdata.pop();
+    while (thread_data.scratch.sector_scratch == nullptr) {
+      tdata.wait_for_push_notify();
+      thread_data = tdata.pop();
+    }
+
     // std::cout << "TID: " << std::this_thread::get_id()
     //          << " Before offset_iterate_to_Fixed_point()" << std::endl;
     // search on combined graph
-    this->offset_iterate_to_fixed_point(mem_vec, this->l_index, pool,
-                                        coord_map);
+    this->offset_iterate_to_fixed_point(mem_vec, this->l_index, pool, coord_map,
+                                        thread_data);
     insert_time = (float) timer.elapsed();
 
     // prune neighbors using alpha
@@ -219,14 +230,13 @@ namespace diskann {
     prune_neighbors(coord_map, pool, new_nhood);
 
     if (new_nhood.size() > range) {
-      std::cout << "***ERROR*** After prune, for offset_id: " << offset_id << " found "
-                << new_nhood.size() << " neighbors instead of range: " << range
-                << std::endl;
-    
+      std::cout << "***ERROR*** After prune, for offset_id: " << offset_id
+                << " found " << new_nhood.size()
+                << " neighbors instead of range: " << range << std::endl;
     }
 
-    //this->disk_delta->insert_vector(offset_id, new_nhood.data(),
-    //                                (_u32) new_nhood.size());
+    // this->disk_delta->insert_vector(offset_id, new_nhood.data(),
+    //                                 (_u32) new_nhood.size());
     this->disk_delta->inter_insert(offset_id, new_nhood.data(),
                                    (_u32) new_nhood.size());
 
@@ -234,7 +244,8 @@ namespace diskann {
     for (auto &delta : this->mem_deltas) {
       delta->insert_vector(offset_id, new_nhood.data(),
                            (_u32) new_nhood.size());
-      //delta->inter_insert(offset_id, new_nhood.data(), (_u32) new_nhood.size());
+      // delta->inter_insert(offset_id, new_nhood.data(), (_u32)
+      // new_nhood.size());
     }
     delta_time = (float) timer.elapsed();
     // END: mem_vec now connected with new ID
@@ -243,13 +254,15 @@ namespace diskann {
     this->delta_times[thread_no] += delta_time;
     // std::cout << "TID: " << std::this_thread::get_id()
     //          << " Exiting insert_mem_vec() " << std::endl;
+    tdata.push(thread_data);
+    tdata.push_notify_all();
   }
 
   template<typename T, typename TagT>
   void StreamingMerger<T, TagT>::offset_iterate_to_fixed_point(
       const T *vec, const uint32_t Lsize,
-      std::vector<Neighbor> &        expanded_nodes_info,
-      tsl::robin_map<uint32_t, T *> &coord_map) {
+      std::vector<Neighbor>         &expanded_nodes_info,
+      tsl::robin_map<uint32_t, T *> &coord_map, ThreadData<T> &thread_data) {
     std::vector<Neighbor> exp_node_info;
     exp_node_info.reserve(2 * Lsize);
     tsl::robin_map<uint32_t, T *> cmap;
@@ -257,14 +270,16 @@ namespace diskann {
     // NOTE :: handling deletes for disk-index inside this call
     // this->disk_iterate_to_fixed_point(vec, this->l_index, exp_node_info,
     // exp_node_id, best_l_nodes, cmap);
-    uint32_t       omp_thread_no = omp_get_thread_num();
+    uint32_t omp_thread_no = omp_get_thread_num();
     if (this->disk_thread_data.size() <= omp_thread_no) {
       throw ANNException(std::string("Found ") + std::to_string(omp_thread_no) +
                              " thread when only " +
-                             std::to_string(this->disk_thread_data.size()) + " were expected",
+                             std::to_string(this->disk_thread_data.size()) +
+                             " were expected",
                          -1);
     }
-    ThreadData<T> &thread_data = this->disk_thread_data[omp_thread_no];
+
+    // ThreadData<T> &thread_data = this->disk_thread_data[omp_thread_no];
     //    ThreadData<T> * thread_data = nullptr;
 
     cmap.reserve(2 * Lsize);
@@ -352,7 +367,7 @@ namespace diskann {
 
   template<typename T, typename TagT>
   void StreamingMerger<T, TagT>::occlude_list(
-      std::vector<Neighbor> &              pool,
+      std::vector<Neighbor>               &pool,
       const tsl::robin_map<uint32_t, T *> &coord_map,
       std::vector<Neighbor> &result, std::vector<float> &occlude_factor) {
     if (pool.empty())
@@ -431,9 +446,9 @@ namespace diskann {
 
   template<typename T, typename TagT>
   void StreamingMerger<T, TagT>::dump_to_disk(const uint32_t start_id,
-                                              const char *   buf,
+                                              const char    *buf,
                                               const uint32_t n_sectors,
-                                              std::ofstream & output_writer) {
+                                              std::ofstream &output_writer) {
     assert(start_id % this->nnodes_per_sector == 0);
     uint32_t start_sector = (start_id / this->nnodes_per_sector) + 1;
     uint64_t start_off = start_sector * (uint64_t) SECTOR_LEN;
@@ -468,16 +483,16 @@ namespace diskann {
     diskann::cout << "Found " << this->disk_deleted_ids.size()
                   << " tags to delete from SSD-DiskANN\n";
 
-//    this->mem_deleted_ids.resize(this->mem_data.size());
+    //    this->mem_deleted_ids.resize(this->mem_data.size());
     for (uint32_t i = 0; i < this->mem_data.size(); i++) {
       tsl::robin_set<uint32_t> &deleted_ids = this->mem_deleted_ids[i];
       for (uint32_t id = 0; id < this->mem_npts[i]; id++) {
-          if(deleted_ids.find(id) != deleted_ids.end())
-              continue;
+        if (deleted_ids.find(id) != deleted_ids.end())
+          continue;
         const TagT tag = this->mem_tags[i][id];
-        //if (this->deleted_tags.find(tag) != this->deleted_tags.end()) {
-        //  deleted_ids.insert(id);
-        //}
+        // if (this->deleted_tags.find(tag) != this->deleted_tags.end()) {
+        //   deleted_ids.insert(id);
+        // }
         if (this->latter_deleted_tags[i].find(tag) !=
             this->latter_deleted_tags[i].end()) {
           deleted_ids.insert(id);
@@ -496,10 +511,10 @@ namespace diskann {
 
     // open output file for writing
     // Was: this->disk_index_out_path + "_disk.index";
-    
+
     diskann::cout << "Writing delete consolidated graph to "
                   << this->temp_disk_index_path << std::endl;
-    std::ofstream output_writer(this->temp_disk_index_path, 
+    std::ofstream output_writer(this->temp_disk_index_path,
                                 std::ios::out | std::ios::binary);
     assert(output_writer.is_open());
     // skip writing header for now
@@ -545,7 +560,6 @@ namespace diskann {
       diskann::cout << new_start_id << " / " << this->disk_npts
                     << " nodes processed.\n";
       start_id = new_start_id;
-
     }
     double e2e_time = ((double) delete_timer.elapsed()) / (1000000.0);
     diskann::cout << "Processed Deletes in " << e2e_time << " s." << std::endl;
@@ -641,7 +655,7 @@ namespace diskann {
 
   template<typename T, typename TagT>
   void StreamingMerger<T, TagT>::consolidate_deletes(DiskNode<T> &disk_node,
-                                                     uint8_t *    scratch) {
+                                                     uint8_t     *scratch) {
     // if node is deleted
     if (this->is_deleted(disk_node)) {
       disk_node.nnbrs = 0;
@@ -652,7 +666,6 @@ namespace diskann {
     const uint32_t id = disk_node.id;
 
     assert(disk_node.nnbrs < 512);
-
 
     std::vector<uint32_t> id_nhood(disk_node.nbrs,
                                    disk_node.nbrs + disk_node.nnbrs);
@@ -890,7 +903,7 @@ namespace diskann {
     }
     assert(offset_id < this->offset_ids.back() + INDEX_OFFSET);
     uint32_t index_no =
-        (uint32_t)((offset_id - this->offset_ids[0]) / INDEX_OFFSET);
+        (uint32_t) ((offset_id - this->offset_ids[0]) / INDEX_OFFSET);
     assert(index_no < this->offset_ids.size());
     return index_no;
   }
@@ -935,8 +948,8 @@ namespace diskann {
     size_t allocSize = npts * sizeof(TagT);
     alloc_aligned(((void **) &cur_tags), allocSize, 8 * sizeof(TagT));
 
-    //TODO: We must detect holes in a better way. Currently, it is possible
-    //that one of the tags will be uint32_t::max() and will fail.
+    // TODO: We must detect holes in a better way. Currently, it is possible
+    // that one of the tags will be uint32_t::max() and will fail.
     for (uint32_t i = 0; i < npts; i++) {
       TagT cur_tag;
       // check if `i` is in inverse map
@@ -960,13 +973,13 @@ namespace diskann {
     }
     diskann::save_bin<TagT>(tag_out_filename, cur_tags, npts, 1);
 
-    diskann::cout << "Tags written to  " << tag_out_filename << " in " << timer.elapsed()
-                  << " microsec" << std::endl;
+    diskann::cout << "Tags written to  " << tag_out_filename << " in "
+                  << timer.elapsed() << " microsec" << std::endl;
 
-    //Should not mix delete with alloc aligned
-    //TODO: This will work because we are dealing with uint64 at the moment. 
-    //If we ever have string tags, this'll fail spectacularly.
-    //delete[] cur_tags;
+    // Should not mix delete with alloc aligned
+    // TODO: This will work because we are dealing with uint64 at the moment.
+    // If we ever have string tags, this'll fail spectacularly.
+    // delete[] cur_tags;
     aligned_free(cur_tags);
     // release all tags -- automatically deleted since using `unique_ptr`
     this->mem_tags.clear();
@@ -1131,24 +1144,27 @@ namespace diskann {
                   << std::endl;
   }
 
-
   template<typename T, typename TagT>
-  void StreamingMerger<T, TagT>::merge(const char *                    disk_in,
-                                       const std::vector<std::string> &mem_in,
-                                       const char *                    disk_out,
-                                       std::vector<const std::vector<TagT>*> &deleted_tags_vectors,
-                                       std::string  &working_folder) {
+  void StreamingMerger<T, TagT>::merge(
+      const char *disk_in, const std::vector<std::string> &mem_in,
+      const char                             *disk_out,
+      std::vector<const std::vector<TagT> *> &deleted_tags_vectors,
+      std::string                            &working_folder) {
     // load disk index
     this->disk_index_out_path = disk_out;
     this->disk_index_in_path = disk_in;
     this->TMP_FOLDER = working_folder;
     std::cout << "Working folder : " << working_folder << std::endl;
-    this->temp_disk_index_path = getTempFilePath(working_folder, "temp_disk_index");
-    this->temp_pq_coords_path = getTempFilePath(working_folder, "temp_pq_compressed");
+    this->temp_disk_index_path =
+        getTempFilePath(working_folder, "temp_disk_index");
+    this->temp_pq_coords_path =
+        getTempFilePath(working_folder, "temp_pq_compressed");
     this->temp_tags_path = getTempFilePath(working_folder, "temp_tags");
-    std::cout << this->temp_disk_index_path << " , "  << this->temp_pq_coords_path << "  ,  " << this->temp_tags_path << std::endl;
-    this->final_index_file =
-        this->_single_file_index ? this->disk_index_out_path
+    std::cout << this->temp_disk_index_path << " , "
+              << this->temp_pq_coords_path << "  ,  " << this->temp_tags_path
+              << std::endl;
+    this->final_index_file = this->_single_file_index
+                                 ? this->disk_index_out_path
                                  : this->disk_index_out_path + "_disk.index";
     this->final_pq_coords_file =
         this->_single_file_index
@@ -1158,7 +1174,6 @@ namespace diskann {
         this->_single_file_index
             ? this->disk_index_out_path
             : this->disk_index_out_path + "_disk.index.tags";
-
 
 #ifndef _WINDOWS
     std::shared_ptr<AlignedFileReader> reader =
@@ -1179,13 +1194,14 @@ namespace diskann {
         (this->disk_index) << std::dec << std::endl;
     this->disk_index->load(disk_in, NUM_INDEX_LOAD_THREADS);
 
-    uint32_t node_cache_count = 1 + (uint32_t) round(this->disk_index->return_nd() * 0.01);
+    uint32_t node_cache_count = 0;  // disable node cache.
+    // uint32_t node_cache_count =
+    //     1 + (uint32_t) round(this->disk_index->return_nd() * 0.01);
     node_cache_count = node_cache_count > PQ_FLASH_INDEX_MAX_NODES_TO_CACHE
                            ? PQ_FLASH_INDEX_MAX_NODES_TO_CACHE
                            : node_cache_count;
     std::vector<uint32_t> cache_node_list;
-    this->disk_index->cache_bfs_levels(node_cache_count,
-                                       cache_node_list);
+    this->disk_index->cache_bfs_levels(node_cache_count, cache_node_list);
     this->disk_index->load_cache_list(cache_node_list);
     this->disk_tags = this->disk_index->get_tags();
     this->init_ids = this->disk_index->get_init_ids();
@@ -1198,10 +1214,10 @@ namespace diskann {
     this->max_node_len = (_u32) this->disk_index->max_node_len;
     _u32 max_degree =
         (max_node_len - (sizeof(T) * this->ndims)) / sizeof(uint32_t) - 1;
-    this->range = max_degree; 
+    this->range = max_degree;
     diskann::cout << "Setting range to: " << this->range << std::endl;
     this->disk_index_num_frozen = this->disk_index->get_num_frozen_points();
-    this->disk_index_frozen_loc = this->disk_index->get_frozen_loc(); 
+    this->disk_index_frozen_loc = this->disk_index->get_frozen_loc();
 
     // create deltas
     this->disk_delta = new GraphDelta(0, this->disk_npts);
@@ -1227,9 +1243,9 @@ namespace diskann {
             this->dist_metric, bin_ndims, bin_npts + 100, true,
             this->_single_file_index, true, false);
         _u64 n1, n2, n3;
-        T *  data_load;
+        T   *data_load;
         diskann::load_aligned_bin<T>(data_path, data_load, n1, n2, n3);
-        npts = (_u32)(n1 - 1);
+        npts = (_u32) (n1 - 1);
         assert(npts < MAX_PTS_PER_MEM_INDEX);
         this->mem_npts.push_back(npts);
         this->mem_data.push_back(data_load);
@@ -1238,10 +1254,9 @@ namespace diskann {
         this->offset_ids.push_back(index_offset);
         this->mem_deltas.push_back(new GraphDelta(index_offset, npts));
         tsl::robin_set<uint32_t> temp_del_set;
-        if(file_exists(mem_index_path + ".del"))
-        {
-            mem_index->load_delete_set(mem_index_path + ".del");
-            mem_index->get_delete_set(temp_del_set);
+        if (file_exists(mem_index_path + ".del")) {
+          mem_index->load_delete_set(mem_index_path + ".del");
+          mem_index->get_delete_set(temp_del_set);
         }
         this->mem_deleted_ids.push_back(temp_del_set);
         mem_index->load_tags(mem_index_path + ".tags");
@@ -1277,10 +1292,10 @@ namespace diskann {
 
         // load mem_index_data with appropriate offset
         _u64 n1, n2, n3;
-        T *  data_load;
+        T   *data_load;
         diskann::load_aligned_bin<T>(mem_index_path, data_load, n1, n2, n3,
                                      file_offset_data[1]);
-        npts = (_u32)(n1 - 1);
+        npts = (_u32) (n1 - 1);
         assert(npts < MAX_PTS_PER_MEM_INDEX);
         this->mem_npts.push_back(npts);
         this->mem_data.push_back(data_load);
@@ -1324,14 +1339,14 @@ namespace diskann {
 
     for (size_t j = 0; j < deleted_tags_vectors.size(); j++) {
       this->latter_deleted_tags.push_back(tsl::robin_set<TagT>());
-      for (size_t i = j+1; i < deleted_tags_vectors.size(); i++) {
+      for (size_t i = j + 1; i < deleted_tags_vectors.size(); i++) {
         for (size_t k = 0; k < deleted_tags_vectors[i]->size(); k++) {
           this->latter_deleted_tags[j].insert((*deleted_tags_vectors[i])[k]);
         }
       }
     }
 
-    //TODO: See if this can be included in the previous loop
+    // TODO: See if this can be included in the previous loop
     for (auto &deleted_tags_vector : deleted_tags_vectors) {
       for (size_t i = 0; i < deleted_tags_vector->size(); i++) {
         this->deleted_tags.insert((*deleted_tags_vector)[i]);
@@ -1372,24 +1387,23 @@ namespace diskann {
     new_max_pts = new_max_pts + 1;
 
     // TODO (correct) :: figure out naming scheme
-    //std::string new_disk_out(this->disk_index_out_path + "_disk.index");
-    //diskann::cout << "RELOAD: Creating new disk graph at " << new_disk_out
+    // std::string new_disk_out(this->disk_index_out_path + "_disk.index");
+    // diskann::cout << "RELOAD: Creating new disk graph at " << new_disk_out
     //              << "\n";
-    //std::string new_pq_prefix(this->disk_index_out_path + "_pq");
-    //std::string new_pq_coords(new_pq_prefix + "_compressed.bin");
+    // std::string new_pq_prefix(this->disk_index_out_path + "_pq");
+    // std::string new_pq_coords(new_pq_prefix + "_compressed.bin");
     diskann::cout << "RELOAD: Creating new PQ coords file "
                   << this->temp_pq_coords_path << std::endl;
 
-   
     // TODO (correct) :: write to the right file
-    //std::string tmp_file = TMP_FOLDER + "/index_ravi";
+    // std::string tmp_file = TMP_FOLDER + "/index_ravi";
 
 #ifdef USE_TCMALLOC
     MallocExtension::instance()->ReleaseFreeMemory();
 #endif
 
-    //this->output_writer.open(tmp_file, std::ios::out | std::ios::binary);
-    //assert(this->output_writer.is_open());
+    // this->output_writer.open(tmp_file, std::ios::out | std::ios::binary);
+    // assert(this->output_writer.is_open());
 
     // BEGIN -- PQ data on disk not consistent, not in right order
     // write outdated PQ data into pq writer with intentionally wrong header -
@@ -1417,7 +1431,7 @@ namespace diskann {
     pq_writer.close();
 
     // write out tags
-    //const std::string tag_file = new_disk_out + ".tags";
+    // const std::string tag_file = new_disk_out + ".tags";
     this->write_tag_file(this->temp_tags_path, new_max_pts);
 
     // switch index to read-only mode
@@ -1478,14 +1492,13 @@ namespace diskann {
     // start merging
     // BEGIN -- graph on disk has NO deleted references, NO newly inserted
     // points
-    
-    
+
     this->process_merges();
     // END -- graph on disk has NO deleted references, has newly inserted points
 
     /* copy output from temp_file -> new_disk_out */
     // reset temp_file ptr
-    //this->output_writer.close();
+    // this->output_writer.close();
 
     auto copy_file = [](const std::string &src, const std::string &dest) {
       diskann::cout << "COPY :: " << src << " --> " << dest << "\n";
@@ -1496,24 +1509,23 @@ namespace diskann {
       src_reader.close();
     };
     // copy index
-    //copy_file(tmp_file, this->disk_index_out_path);
+    // copy_file(tmp_file, this->disk_index_out_path);
 
     // merge files if needed
     if (this->_single_file_index) {
       // update metadata with pq_pivots_file_size, pq_vector_file_size
       size_t                nr, nc;
       std::vector<uint64_t> output_metadata;
-      uint64_t *            out_metadata;
+      uint64_t             *out_metadata;
 
-      diskann::load_bin<uint64_t>(this->final_index_file, out_metadata, nr,
-                                  nc);
+      diskann::load_bin<uint64_t>(this->final_index_file, out_metadata, nr, nc);
       for (size_t i = 0; i < nr; i++)
         output_metadata.push_back(out_metadata[i]);
 
       delete[] out_metadata;
 
       // tags
-      TagT *   tags;
+      TagT    *tags;
       uint64_t tag_num, tag_dim;
       diskann::load_bin(this->temp_tags_path, tags, tag_num, tag_dim);
       size_t tag_bytes_written =
@@ -1525,7 +1537,7 @@ namespace diskann {
                                 tag_bytes_written);
 
       size_t      nr_in, nc_in;
-      uint64_t *  in_metadata;
+      uint64_t   *in_metadata;
       std::string disk_in = this->_single_file_index
                                 ? this->disk_index_in_path
                                 : this->disk_index_in_path + "_disk.index";
@@ -1536,13 +1548,12 @@ namespace diskann {
       diskann::load_bin<uint64_t>(disk_in, pq_metadata_in, nr_pq_in, nc_pq_in,
                                   in_metadata[8]);
       diskann::save_bin<uint64_t>(this->final_index_file, pq_metadata_in,
-                                  nr_pq_in,
-                                  nc_pq_in,
+                                  nr_pq_in, nc_pq_in,
                                   output_metadata[output_metadata.size() - 1]);
 
       size_t pq_pivots_total_bytes_written = 0;
       // pq_pivots
-      float *  pq_pivots_data;
+      float   *pq_pivots_data;
       uint64_t pq_pts, pq_dims;
       diskann::load_bin<float>(disk_in, pq_pivots_data, pq_pts, pq_dims,
                                in_metadata[8] + pq_metadata_in[0]);
@@ -1553,14 +1564,13 @@ namespace diskann {
       diskann::cout << "Written pivots to single index file" << std::endl;
 
       // pq centroids
-      float *  pq_centroid_data;
+      float   *pq_centroid_data;
       uint64_t centroid_num, centroid_dim;
       diskann::load_bin<float>(disk_in, pq_centroid_data, centroid_num,
                                centroid_dim,
                                in_metadata[8] + pq_metadata_in[1]);
       size_t pq_centroid_bytes = diskann::save_bin<float>(
-          this->final_index_file, pq_centroid_data, centroid_num,
-          centroid_dim,
+          this->final_index_file, pq_centroid_data, centroid_num, centroid_dim,
           output_metadata[output_metadata.size() - 1] + pq_metadata_in[1]);
       delete[] pq_centroid_data;
       diskann::cout << "Written centroids to single index file" << std::endl;
@@ -1619,19 +1629,17 @@ namespace diskann {
       // PQ pivots
 
       copy_file(prefix_pq_in + "_pivots.bin", prefix_pq_out + "_pivots.bin");
-      diskann::save_bin<uint8_t>(
-          this->final_pq_coords_file, this->pq_data, (uint64_t) this->disk_npts,
-          (uint64_t) ndims_u32);
-      
-      copy_file(this->temp_tags_path, this->final_tags_file);
+      diskann::save_bin<uint8_t>(this->final_pq_coords_file, this->pq_data,
+                                 (uint64_t) this->disk_npts,
+                                 (uint64_t) ndims_u32);
 
+      copy_file(this->temp_tags_path, this->final_tags_file);
     }
 
     // destruct PQFlashIndex
     delete this->disk_index;
     this->disk_index = nullptr;
     diskann::cout << "Destroyed PQ Flash Index\n";
-
   }
 
   // template class instantiations

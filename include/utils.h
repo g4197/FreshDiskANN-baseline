@@ -42,15 +42,16 @@ typedef int FileHandle;
 // https://github.com/Microsoft/BLAS-on-flash/blob/master/include/utils.h
 // round up X to the nearest multiple of Y
 #define ROUND_UP(X, Y) \
-  ((((uint64_t)(X) / (Y)) + ((uint64_t)(X) % (Y) != 0)) * (Y))
+  ((((uint64_t) (X) / (Y)) + ((uint64_t) (X) % (Y) != 0)) * (Y))
 
-#define DIV_ROUND_UP(X, Y) (((uint64_t)(X) / (Y)) + ((uint64_t)(X) % (Y) != 0))
+#define DIV_ROUND_UP(X, Y) \
+  (((uint64_t) (X) / (Y)) + ((uint64_t) (X) % (Y) != 0))
 
 // round down X to the nearest multiple of Y
-#define ROUND_DOWN(X, Y) (((uint64_t)(X) / (Y)) * (Y))
+#define ROUND_DOWN(X, Y) (((uint64_t) (X) / (Y)) * (Y))
 
 // alignment tests
-#define IS_ALIGNED(X, Y) ((uint64_t)(X) % (uint64_t)(Y) == 0)
+#define IS_ALIGNED(X, Y) ((uint64_t) (X) % (uint64_t) (Y) == 0)
 #define IS_512_ALIGNED(X) IS_ALIGNED(X, 512)
 #define IS_4096_ALIGNED(X) IS_ALIGNED(X, 4096)
 #define METADATA_SIZE \
@@ -316,7 +317,6 @@ namespace diskann {
 
     diskann::cout << "Metadata: #pts = " << npts << ", #dims = " << dim << "..."
                   << std::endl;
-
     data = new T[npts * dim];
     reader.read((char*) data, npts * dim * sizeof(T));
   }
@@ -355,7 +355,9 @@ namespace diskann {
     std::ifstream reader(bin_file, std::ios::binary | std::ios::ate);
     //    uint64_t      fsize = reader.tellg();
     reader.seekg(0);
-
+    if (data != nullptr) {
+      delete data;
+    }
     load_bin_impl<T>(reader, data, npts, dim, offset);
   }
   // load_bin functions END
@@ -409,7 +411,6 @@ namespace diskann {
       throw diskann::ANNException(stream.str(), -1, __FUNCSIG__, __FILE__,
                                   __LINE__);
     }
-
     ids = new uint32_t[npts * dim];
     reader.read((char*) ids, npts * dim * sizeof(uint32_t));
 
@@ -438,7 +439,7 @@ namespace diskann {
   template<typename T>
   inline void load_bin(const std::string& bin_file, std::unique_ptr<T[]>& data,
                        size_t& npts, size_t& dim, size_t offset = 0) {
-    T* ptr;
+    T* ptr = nullptr;
     load_bin<T>(bin_file, ptr, npts, dim, offset);
     data.reset(ptr);
   }

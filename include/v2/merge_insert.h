@@ -28,7 +28,7 @@
 
 #include "windows_customizations.h"
 
-#define MERGE_TH 18000000
+#define MERGE_TH 3001000
 
 namespace diskann {
 
@@ -40,15 +40,30 @@ namespace diskann {
         Parameters& parameters, size_t dim, const std::string mem_prefix,
         const std::string disk_prefix_in, const std::string disk_prefix_out,
         Distance<T>* dist, diskann::Metric disk_metric, bool single_file_index,
-        std::string working_folder);
+        std::string working_folder, bool need_copy = true,
+        bool need_swap = false, uint64_t merge_npts = MERGE_TH);
 
     DISKANN_DLLEXPORT ~MergeInsert();
+
+    DISKANN_DLLEXPORT void init_mem_index(uint64_t npts) {
+      if (_mem_index_0 != nullptr) {
+        std::cerr << "Index already initialized" << std::endl;
+        exit(-1);
+      } else {
+        std::cerr << "Init mem index with " << npts << " points" << std::endl;
+        _merge_th = npts;
+        _mem_index_0 = std::make_shared<diskann::Index<T, TagT>>(
+            this->_dist_metric, _dim, 2 * _merge_th, 1, _single_file_index, 1);
+        _mem_index_1 = std::make_shared<diskann::Index<T, TagT>>(
+            this->_dist_metric, _dim, 2 * _merge_th, 1, _single_file_index, 1);
+      }
+    }
 
     // insertion function - insert into short_term_index
     DISKANN_DLLEXPORT int insert(const T* point, const TagT& tag);
 
     DISKANN_DLLEXPORT void lazy_delete(const TagT& tag);
-    //DISKANN_DLLEXPORT void lazy_delete(tsl::robin_set<TagT>& delete_list);
+    // DISKANN_DLLEXPORT void lazy_delete(tsl::robin_set<TagT>& delete_list);
 
     // search function - search both short_term_index and long_term_index and
     // return with top L candidate tags of the shard
@@ -74,8 +89,8 @@ namespace diskann {
 
     //_active_index flag will be modified only inside this function
     void switch_index();  // function to atomically switch btw indices, makes
-                          // older index inactive(read-only), saves it, makes new
-                          // index active (r/w)
+                          // older index inactive(read-only), saves it, makes
+                          // new index active (r/w)
 
     // save currently active mem_index and make it inactive
     int save();
@@ -87,7 +102,7 @@ namespace diskann {
     // saving is successful
     void merge();
 
-   private:
+   public:
     size_t   _merge_th = 0;
     size_t   _mem_points = 0;  // reflects number of points in active mem index
     size_t   _index_points = 0;
@@ -101,12 +116,12 @@ namespace diskann {
     std::shared_ptr<Index<T, TagT>>    _mem_index_0 = nullptr;
     std::shared_ptr<Index<T, TagT>>    _mem_index_1 = nullptr;
     std::shared_ptr<AlignedFileReader> reader = nullptr;
-    PQFlashIndex<T, TagT>* _disk_index = nullptr;
-   StreamingMerger<T, TagT> *  _merger = nullptr;
-   std::string TMP_FOLDER;
+    PQFlashIndex<T, TagT>*             _disk_index = nullptr;
+    StreamingMerger<T, TagT>*          _merger = nullptr;
+    std::string                        TMP_FOLDER;
 
-   diskann::Metric _dist_metric;
-    Distance<T>* _dist_comp;
+    diskann::Metric _dist_metric;
+    Distance<T>*    _dist_comp;
 
     diskann::Parameters _paras_mem;
     diskann::Parameters _paras_disk;
