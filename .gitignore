@@ -1,0 +1,7 @@
+build/
+.vscode/
+indices/
+.cache/
+data/*
+figures/*
+scripts/tests/drop_cache
